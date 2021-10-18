@@ -16,8 +16,7 @@
 from copy import copy
 import time
 
-from mycroft.configuration import Configuration
-from mycroft.util.lang import set_active_lang
+from mycroft.configuration import Configuration, set_default_lf_lang
 from mycroft.util.log import LOG
 from mycroft.util.parse import normalize
 from mycroft.metrics import report_timing, Stopwatch
@@ -30,7 +29,7 @@ from .intent_service_interface import open_intent_envelope
 def _get_message_lang(message):
     """Get the language from the message or the default language.
 
-    Arguments:
+    Args:
         message: message to check for language code.
 
     Returns:
@@ -48,7 +47,7 @@ def _normalize_all_utterances(utterances):
     will be set as the second item in the tuple, if normalization doesn't
     change anything the tuple will only have the "raw" original utterance.
 
-    Arguments:
+    Args:
         utterances (list): list of utterances to normalize
 
     Returns:
@@ -153,14 +152,14 @@ class IntentService:
     def reset_converse(self, message):
         """Let skills know there was a problem with speech recognition"""
         lang = _get_message_lang(message)
-        set_active_lang(lang)
+        set_default_lf_lang(lang)
         for skill in copy(self.active_skills):
             self.do_converse(None, skill[0], lang, message)
 
     def do_converse(self, utterances, skill_id, lang, message):
         """Call skill and ask if they want to process the utterance.
 
-        Arguments:
+        Args:
             utterances (list of tuples): utterances paired with normalized
                                          versions.
             skill_id: skill to query.
@@ -183,7 +182,7 @@ class IntentService:
     def handle_converse_error(self, message):
         """Handle error in converse system.
 
-        Arguments:
+        Args:
             message (Message): info about the error.
         """
         skill_id = message.data["skill_id"]
@@ -195,7 +194,7 @@ class IntentService:
     def remove_active_skill(self, skill_id):
         """Remove a skill from being targetable by converse.
 
-        Arguments:
+        Args:
             skill_id (str): skill to remove
         """
         for skill in self.active_skills:
@@ -208,7 +207,7 @@ class IntentService:
         The skill is added to the front of the list, if it's already in the
         list it's removed so there is only a single entry of it.
 
-        Arguments:
+        Args:
             skill_id (str): identifier of skill to be added.
         """
         # search the list for an existing entry that already contains it
@@ -226,7 +225,7 @@ class IntentService:
 
         NOTE: This only applies to those with Opt In.
 
-        Arguments:
+        Args:
             intent (IntentMatch or None): intet match info
             context (dict): context info about the interaction
             stopwatch (StopWatch): Timing info about the skill parsing.
@@ -269,12 +268,12 @@ class IntentService:
         If all these fail the complete_intent_failure message will be sent
         and a generic info of the failure will be spoken.
 
-        Arguments:
+        Args:
             message (Message): The messagebus data
         """
         try:
             lang = _get_message_lang(message)
-            set_active_lang(lang)
+            set_default_lf_lang(lang)
 
             utterances = message.data.get('utterances', [])
             combined = _normalize_all_utterances(utterances)
@@ -306,6 +305,10 @@ class IntentService:
                 # Launch skill if not handled by the match function
                 if match.intent_type:
                     reply = message.reply(match.intent_type, match.intent_data)
+                    # Add back original list of utterances for intent handlers
+                    # match.intent_data only includes the utterance with the
+                    # highest confidence.
+                    reply.data["utterances"] = utterances
                     self.bus.emit(reply)
 
             else:
@@ -319,7 +322,7 @@ class IntentService:
     def _converse(self, utterances, lang, message):
         """Give active skills a chance at the utterance
 
-        Arguments:
+        Args:
             utterances (list):  list of utterances
             lang (string):      4 letter ISO language code
             message (Message):  message to use to generate reply
@@ -344,7 +347,7 @@ class IntentService:
     def send_complete_intent_failure(self, message):
         """Send a message that no skill could handle the utterance.
 
-        Arguments:
+        Args:
             message (Message): original message to forward from
         """
         self.bus.emit(message.forward('complete_intent_failure'))
@@ -352,21 +355,27 @@ class IntentService:
     def handle_register_vocab(self, message):
         """Register adapt vocabulary.
 
-        Arguments:
+        Args:
             message (Message): message containing vocab info
         """
-        start_concept = message.data.get('start')
-        end_concept = message.data.get('end')
+        # TODO: 22.02 Remove backwards compatibility
+        if _is_old_style_keyword_message(message):
+            LOG.warning('Deprecated: Registering keywords with old message. '
+                        'This will be removed in v22.02.')
+            _update_keyword_message(message)
+
+        entity_value = message.data.get('entity_value')
+        entity_type = message.data.get('entity_type')
         regex_str = message.data.get('regex')
         alias_of = message.data.get('alias_of')
-        self.adapt_service.register_vocab(start_concept, end_concept,
-                                          alias_of, regex_str)
+        self.adapt_service.register_vocabulary(entity_value, entity_type,
+                                               alias_of, regex_str)
         self.registered_vocab.append(message.data)
 
     def handle_register_intent(self, message):
         """Register adapt intent.
 
-        Arguments:
+        Args:
             message (Message): message containing intent info
         """
         intent = open_intent_envelope(message)
@@ -375,7 +384,7 @@ class IntentService:
     def handle_detach_intent(self, message):
         """Remover adapt intent.
 
-        Arguments:
+        Args:
             message (Message): message containing intent info
         """
         intent_name = message.data.get('intent_name')
@@ -384,7 +393,7 @@ class IntentService:
     def handle_detach_skill(self, message):
         """Remove all intents registered for a specific skill.
 
-        Arguments:
+        Args:
             message (Message): message containing intent info
         """
         skill_id = message.data.get('skill_id')
@@ -428,7 +437,7 @@ class IntentService:
     def handle_get_intent(self, message):
         """Get intent from either adapt or padatious.
 
-        Arguments:
+        Args:
             message (Message): message containing utterance
         """
         utterance = message.data["utterance"]
@@ -487,7 +496,7 @@ class IntentService:
     def handle_get_adapt(self, message):
         """handler getting the adapt response for an utterance.
 
-        Arguments:
+        Args:
             message (Message): message containing utterance
         """
         utterance = message.data["utterance"]
@@ -519,7 +528,7 @@ class IntentService:
     def handle_get_padatious(self, message):
         """messagebus handler for perfoming padatious parsing.
 
-        Arguments:
+        Args:
             message (Message): message triggering the method
         """
         utterance = message.data["utterance"]
@@ -535,7 +544,7 @@ class IntentService:
     def handle_padatious_manifest(self, message):
         """Messagebus handler returning the registered padatious intents.
 
-        Arguments:
+        Args:
             message (Message): message triggering the method
         """
         self.bus.emit(message.reply(
@@ -545,9 +554,35 @@ class IntentService:
     def handle_entity_manifest(self, message):
         """Messagebus handler returning the registered padatious entities.
 
-        Arguments:
+        Args:
             message (Message): message triggering the method
         """
         self.bus.emit(message.reply(
             "intent.service.padatious.entities.manifest",
             {"entities": self.padatious_service.registered_entities}))
+
+
+def _is_old_style_keyword_message(message):
+    """Simple check that the message is not using the updated format.
+
+    TODO: Remove in v22.02
+
+    Args:
+        message (Message): Message object to check
+
+    Returns:
+        (bool) True if this is an old messagem, else False
+    """
+    return ('entity_value' not in message.data and 'start' in message.data)
+
+
+def _update_keyword_message(message):
+    """Make old style keyword registration message compatible.
+
+    Copies old keys in message data to new names.
+
+    Args:
+        message (Message): Message to update
+    """
+    message.data['entity_value'] = message.data['start']
+    message.data['entity_type'] = message.data['end']

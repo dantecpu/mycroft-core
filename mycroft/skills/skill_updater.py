@@ -17,6 +17,7 @@ import os
 import sys
 from datetime import datetime
 from time import time
+import xdg.BaseDirectory
 
 from msm import MsmException
 
@@ -26,6 +27,7 @@ from mycroft.util import connected
 from mycroft.util.combo_lock import ComboLock
 from mycroft.util.log import LOG
 from .msm_wrapper import build_msm_config, create_msm
+from mycroft.util.file_utils import get_temp_path
 
 ONE_HOUR = 3600
 FIVE_MINUTES = 300  # number of seconds in a minute
@@ -48,7 +50,7 @@ class SkillUpdater:
     _msm = None
 
     def __init__(self, bus=None):
-        self.msm_lock = ComboLock('/tmp/mycroft-msm.lck')
+        self.msm_lock = ComboLock(get_temp_path('mycroft-msm.lck'))
         self.install_retries = 0
         self.config = Configuration.get()
         update_interval = self.config['skills']['update_interval']
@@ -72,8 +74,8 @@ class SkillUpdater:
         otherwise use the timestamp on .msm as a basis.
         """
         msm_files_exist = (
-                os.path.exists(self.dot_msm_path) and
-                os.path.exists(self.installed_skills_file_path)
+            os.path.exists(self.dot_msm_path) and
+            os.path.exists(self.installed_skills_file_path)
         )
         if msm_files_exist:
             mtime = os.path.getmtime(self.dot_msm_path)
@@ -96,9 +98,9 @@ class SkillUpdater:
                     '.mycroft-skills'
                 )
             else:
-                self._installed_skills_file_path = os.path.expanduser(
-                    '~/.mycroft/.mycroft-skills'
-                )
+                self._installed_skills_file_path = os.path.join(
+                    xdg.BaseDirectory.save_data_path('mycroft'),
+                    '.mycroft-skills')
 
         return self._installed_skills_file_path
 

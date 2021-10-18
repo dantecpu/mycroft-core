@@ -42,6 +42,7 @@ class UploadQueue:
     After all queued settingsmeta has been processed and the queue is empty
     the queue will set the self.started flag.
     """
+
     def __init__(self):
         self._queue = []
         self.started = False
@@ -81,7 +82,7 @@ class UploadQueue:
             LOG.info('Updating settings meta during runtime...')
         with self.lock:
             # Remove existing loader
-            self._queue == [e for e in self._queue if e != loader]
+            self._queue = [e for e in self._queue if e != loader]
             self._queue.append(loader)
 
 
@@ -91,7 +92,7 @@ def _shutdown_skill(instance):
     Call the default_shutdown method of the skill, will produce a warning if
     the shutdown process takes longer than 1 second.
 
-    Arguments:
+    Args:
         instance (MycroftSkill): Skill instance to shutdown
     """
     try:
@@ -114,7 +115,7 @@ class SkillManager(Thread):
     def __init__(self, bus, watchdog=None):
         """Constructor
 
-        Arguments:
+        Args:
             bus (event emitter): Mycroft messagebus connection
             watchdog (callable): optional watchdog function
         """
