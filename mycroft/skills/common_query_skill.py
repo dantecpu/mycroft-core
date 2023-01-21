@@ -11,13 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import time
-
 from enum import IntEnum
 from abc import ABC, abstractmethod
 from .mycroft_skill import MycroftSkill
 
-from mycroft.configuration import Configuration
 from mycroft.util.file_utils import resolve_resource_file
 
 
@@ -36,8 +33,6 @@ def is_CQSVisualMatchLevel(match_level):
     return isinstance(match_level, type(CQSVisualMatchLevel.EXACT))
 
 
-VISUAL_DEVICES = ['mycroft_mark_2']
-
 """these are for the confidence calculation"""
 # how much each topic word is worth
 # when found in the answer
@@ -51,10 +46,6 @@ MAX_ANSWER_LEN_FOR_CONFIDENCE = 50
 
 # higher number - less bias for word length
 WORD_COUNT_DIVISOR = 100
-
-
-def handles_visuals(platform):
-    return platform in VISUAL_DEVICES
 
 
 class CommonQuerySkill(MycroftSkill, ABC):
@@ -74,11 +65,15 @@ class CommonQuerySkill(MycroftSkill, ABC):
         noise_words_filename = resolve_resource_file(noise_words_filepath)
         self.translated_noise_words = []
         try:
-            with open(noise_words_filename) as f:
-                self.translated_noise_words = f.read().strip()
-            self.translated_noise_words = self.translated_noise_words.split()
+            if noise_words_filename:
+                with open(noise_words_filename) as f:
+                    read_noise_words = f.read().strip()
+                self.translated_noise_words = read_noise_words.split()
+            else:
+                raise FileNotFoundError
         except FileNotFoundError:
-            self.log.warning("Missing noise_words.list file in res/text/lang")
+            self.log.warning("Missing noise_words.list file in "
+                             f"res/text/{self.lang}")
 
         # these should probably be configurable
         self.level_confidence = {
@@ -149,9 +144,8 @@ class CommonQuerySkill(MycroftSkill, ABC):
         num_sentences = float(float(len(answer.split("."))) / float(10))
 
         # Add bonus if match has visuals and the device supports them.
-        platform = self.config_core.get("enclosure", {}).get("platform")
         bonus = 0.0
-        if is_CQSVisualMatchLevel(level) and handles_visuals(platform):
+        if is_CQSVisualMatchLevel(level) and self.gui.connected:
             bonus = 0.1
 
         # extract topic
